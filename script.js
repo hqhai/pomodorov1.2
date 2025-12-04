@@ -1,7 +1,7 @@
 const { ipcRenderer } = require('electron');
 
 // Timer Constants
-const WORK_TIME = 25 * 60;
+const WORK_TIME = 1 * 60;
 const SHORT_BREAK_TIME = 5 * 60;
 const LONG_BREAK_TIME = 10 * 60;
 const CYCLES_BEFORE_LONG_BREAK = 5;
@@ -150,14 +150,9 @@ function completeCycle() {
     if (currentMode === 'work') {
         cycleCount++;
         cycleCountDisplay.textContent = cycleCount;
-
-        if (cycleCount % CYCLES_BEFORE_LONG_BREAK === 0) {
-            switchMode('longBreak');
-        } else {
-            switchMode('shortBreak');
-        }
+        switchMode('waiting'); // Switch to waiting mode after work
     } else {
-        switchMode('work');
+        switchMode('work'); // Switch back to work after waiting
     }
 
     timerState = 'stopped';
@@ -172,6 +167,10 @@ function switchMode(mode) {
         timeLeft = WORK_TIME;
         totalTime = WORK_TIME;
         modeText.textContent = 'POMODORO';
+    } else if (mode === 'waiting') {
+        timeLeft = SHORT_BREAK_TIME;
+        totalTime = SHORT_BREAK_TIME;
+        modeText.textContent = 'WAITING';
     } else if (mode === 'shortBreak') {
         timeLeft = SHORT_BREAK_TIME;
         totalTime = SHORT_BREAK_TIME;
@@ -199,14 +198,30 @@ function setProgress(time) {
 
 function updateStateVisuals() {
     if (timerState === 'running') {
-        statusIcon.src = 'assets/Fire.gif';
-        statusIcon.classList.add('fire');
-        statusIcon.classList.remove('ice');
+        if (currentMode === 'waiting') {
+            statusIcon.src = 'assets/waiting.gif';
+            statusIcon.classList.remove('fire', 'ice');
+            statusIcon.classList.add('waiting');
+            progressCircle.style.stroke = '#4CAF50'; // Green color for waiting
+        } else {
+            statusIcon.src = 'assets/Fire.gif';
+            statusIcon.classList.add('fire');
+            statusIcon.classList.remove('ice', 'waiting');
+            progressCircle.style.stroke = '#ff6b6b'; // Red color for work
+        }
         body.classList.remove('paused-state');
     } else {
-        statusIcon.src = 'assets/freeze.webp';
-        statusIcon.classList.add('ice');
-        statusIcon.classList.remove('fire');
+        if (currentMode === 'waiting') {
+            statusIcon.src = 'assets/waiting.gif';
+            statusIcon.classList.remove('fire', 'ice');
+            statusIcon.classList.add('waiting');
+            progressCircle.style.stroke = '#4CAF50'; // Green color for waiting
+        } else {
+            statusIcon.src = 'assets/freeze.webp';
+            statusIcon.classList.add('ice');
+            statusIcon.classList.remove('fire', 'waiting');
+            progressCircle.style.stroke = '#4facfe'; // Blue color for frozen state
+        }
         body.classList.add('paused-state');
     }
 }

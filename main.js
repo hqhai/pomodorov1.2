@@ -99,6 +99,13 @@ function toggleBubbleMode() {
         mainWindow.webContents.send('bubble-mode', false);
         mainWindow.webContents.send('stop-shaking');
         stopIdleCheck();
+
+        // Center window when exiting bubble mode (zoom in)
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width, height } = primaryDisplay.workAreaSize;
+        const x = Math.round((width - FULL_WIDTH) / 2);
+        const y = Math.round((height - FULL_HEIGHT) / 2);
+        mainWindow.setPosition(x, y);
     }
 }
 

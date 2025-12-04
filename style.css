@@ -156,6 +156,11 @@ html, body {
     filter: drop-shadow(0 0 10px rgba(79, 172, 254, 0.6));
 }
 
+.status-icon.waiting {
+    animation: pulse 2s infinite ease-in-out;
+    filter: drop-shadow(0 0 10px rgba(76, 175, 80, 0.6));
+}
+
 /* Timer Info */
 .timer-info {
     text-align: center;
@@ -308,6 +313,10 @@ body.bubble-mode .status-icon.ice {
 
 body.bubble-mode .status-icon.fire {
     filter: drop-shadow(0 0 15px rgba(255, 107, 107, 0.8));
+}
+
+body.bubble-mode .status-icon.waiting {
+    filter: drop-shadow(0 0 15px rgba(76, 175, 80, 0.8));
 }
 
 /* Bubble Exit Button - hidden by default */
