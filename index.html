@@ -26,8 +26,8 @@
                 <!-- Progress Ring & Icon (Clickable) -->
                 <div class="progress-container" id="icon-trigger">
                     <svg class="progress-ring" width="220" height="220" viewBox="0 0 220 220">
-                        <circle class="progress-ring__circle-bg" stroke="rgba(255,255,255,0.1)" stroke-width="6" fill="transparent" r="100" cx="110" cy="110"/>
-                        <circle class="progress-ring__circle" stroke="#4facfe" stroke-width="6" fill="transparent" r="100" cx="110" cy="110"/>
+                        <circle class="progress-ring__circle-bg" stroke="rgba(255,255,255,0.1)" stroke-width="10" fill="transparent" r="100" cx="110" cy="110"/>
+                        <circle class="progress-ring__circle" stroke="#4facfe" stroke-width="10" fill="transparent" r="100" cx="110" cy="110"/>
                     </svg>
                     <div class="icon-wrapper">
                         <img id="status-icon" src="assets/freeze.webp" alt="Status Icon" class="status-icon">
@@ -48,9 +48,48 @@
                     <button id="stop-btn" class="btn btn-stop">Stop</button>
                 </div>
 
-                <!-- Cycle Count -->
+                <!-- Cycle Count & Total Time -->
                 <div class="footer-info">
-                    <span>Chu kỳ: <span id="cycle-count">0</span>/5</span>
+                    <span>Chu kỳ: <span id="cycle-count">0</span></span>
+                    <span class="total-time">Tổng: <span id="total-work-time">0h 0m</span></span>
+                </div>
+
+                <!-- Settings Button -->
+                <button id="settings-btn" class="settings-btn" title="Cài đặt">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Settings Panel -->
+            <div id="settings-panel" class="settings-panel hidden">
+                <div class="settings-header">
+                    <h3>Cài đặt</h3>
+                    <button id="settings-close" class="settings-close">&times;</button>
+                </div>
+                <div class="settings-content">
+                    <div class="setting-item">
+                        <label for="work-time-input">Thời gian làm việc (phút)</label>
+                        <input type="number" id="work-time-input" min="1" max="120" value="25">
+                    </div>
+                    <div class="setting-item">
+                        <label for="break-time-input">Thời gian nghỉ (phút)</label>
+                        <input type="number" id="break-time-input" min="1" max="60" value="5">
+                    </div>
+                    <div class="setting-item">
+                        <label for="idle-time-input">Thời gian không hoạt động (giây)</label>
+                        <input type="number" id="idle-time-input" min="5" max="300" value="10">
+                    </div>
+                    <div class="setting-item toggle-item">
+                        <label for="auto-loop-toggle">Tự động lặp</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="auto-loop-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <button id="save-settings" class="btn btn-save">Lưu cài đặt</button>
                 </div>
             </div>
         </div>

@@ -1,10 +1,10 @@
 const { ipcRenderer } = require('electron');
 
-// Timer Constants
-const WORK_TIME = 1 * 60;
-const SHORT_BREAK_TIME = 5 * 60;
-const LONG_BREAK_TIME = 10 * 60;
-const CYCLES_BEFORE_LONG_BREAK = 5;
+// Timer Settings (default values)
+let WORK_TIME = 25 * 60;
+let BREAK_TIME = 5 * 60;
+let IDLE_TIME = 10; // seconds
+let AUTO_LOOP = true;
 
 const CIRCLE_RADIUS = 100;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -16,6 +16,7 @@ let totalTime = WORK_TIME;
 let currentMode = 'work';
 let timerState = 'stopped';
 let cycleCount = 0;
+let totalWorkSeconds = 0; // Total work time in seconds
 
 // DOM Elements
 const timeDisplay = document.getElementById('time');
@@ -26,6 +27,7 @@ const stopBtn = document.getElementById('stop-btn');
 const statusIcon = document.getElementById('status-icon');
 const progressCircle = document.querySelector('.progress-ring__circle');
 const cycleCountDisplay = document.getElementById('cycle-count');
+const totalWorkTimeDisplay = document.getElementById('total-work-time');
 const iconTrigger = document.getElementById('icon-trigger');
 const body = document.body;
 
@@ -34,16 +36,99 @@ const btnBubble = document.getElementById('btn-bubble');
 const btnMinimize = document.getElementById('btn-minimize');
 const btnClose = document.getElementById('btn-close');
 
+// Settings Elements
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const settingsClose = document.getElementById('settings-close');
+const workTimeInput = document.getElementById('work-time-input');
+const breakTimeInput = document.getElementById('break-time-input');
+const idleTimeInput = document.getElementById('idle-time-input');
+const autoLoopToggle = document.getElementById('auto-loop-toggle');
+const saveSettingsBtn = document.getElementById('save-settings');
+
 // Initialize
 function init() {
     progressCircle.style.strokeDasharray = `${CIRCLE_CIRCUMFERENCE} ${CIRCLE_CIRCUMFERENCE}`;
     progressCircle.style.strokeDashoffset = 0;
+
+    // Load saved settings first
+    loadSettings();
 
     // Load saved state
     loadState();
     updateDisplay();
     updateStateVisuals();
     updateButtons();
+}
+
+// Settings Management
+function loadSettings() {
+    const savedSettings = localStorage.getItem('pomodoroSettings');
+    if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        WORK_TIME = settings.workTime || 25 * 60;
+        BREAK_TIME = settings.breakTime || 5 * 60;
+        IDLE_TIME = settings.idleTime || 10;
+        AUTO_LOOP = settings.autoLoop !== undefined ? settings.autoLoop : true;
+    }
+
+    // Update input fields
+    workTimeInput.value = Math.floor(WORK_TIME / 60);
+    breakTimeInput.value = Math.floor(BREAK_TIME / 60);
+    idleTimeInput.value = IDLE_TIME;
+    autoLoopToggle.checked = AUTO_LOOP;
+
+    // Send idle time to main process
+    ipcRenderer.send('idle-time-changed', IDLE_TIME);
+
+    // Update timeLeft if timer is stopped
+    if (timerState === 'stopped' && currentMode === 'work') {
+        timeLeft = WORK_TIME;
+        totalTime = WORK_TIME;
+    }
+}
+
+function saveSettings() {
+    const settings = {
+        workTime: WORK_TIME,
+        breakTime: BREAK_TIME,
+        idleTime: IDLE_TIME,
+        autoLoop: AUTO_LOOP
+    };
+    localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
+}
+
+function applySettings() {
+    const newWorkTime = parseInt(workTimeInput.value) * 60;
+    const newBreakTime = parseInt(breakTimeInput.value) * 60;
+    const newIdleTime = parseInt(idleTimeInput.value);
+    const newAutoLoop = autoLoopToggle.checked;
+
+    WORK_TIME = newWorkTime;
+    BREAK_TIME = newBreakTime;
+    IDLE_TIME = newIdleTime;
+    AUTO_LOOP = newAutoLoop;
+
+    saveSettings();
+
+    // Send idle time to main process
+    ipcRenderer.send('idle-time-changed', IDLE_TIME);
+
+    // Reset timer if stopped
+    if (timerState === 'stopped') {
+        if (currentMode === 'work') {
+            timeLeft = WORK_TIME;
+            totalTime = WORK_TIME;
+        } else if (currentMode === 'waiting') {
+            timeLeft = BREAK_TIME;
+            totalTime = BREAK_TIME;
+        }
+        updateDisplay();
+        setProgress(totalTime);
+    }
+
+    // Close settings panel
+    settingsPanel.classList.add('hidden');
 }
 
 // State Management (localStorage for Electron)
@@ -54,6 +139,7 @@ function saveState() {
         currentMode,
         timerState,
         cycleCount,
+        totalWorkSeconds,
         lastUpdated: Date.now()
     };
     localStorage.setItem('pomodoroState', JSON.stringify(state));
@@ -70,8 +156,13 @@ function loadState() {
         currentMode = state.currentMode;
         timerState = state.timerState;
         cycleCount = state.cycleCount || 0;
+        totalWorkSeconds = state.totalWorkSeconds || 0;
 
         if (timerState === 'running') {
+            // Add elapsed work time if was in work mode
+            if (currentMode === 'work') {
+                totalWorkSeconds += elapsed;
+            }
             timeLeft -= elapsed;
             if (timeLeft <= 0) {
                 timeLeft = 0;
@@ -83,6 +174,7 @@ function loadState() {
         }
 
         cycleCountDisplay.textContent = cycleCount;
+        updateTotalWorkTimeDisplay();
     }
 }
 
@@ -93,9 +185,17 @@ function startTimer() {
     updateStateVisuals();
     updateButtons();
     saveState();
+    notifyTimerState();
 
     timerInterval = setInterval(() => {
         timeLeft--;
+
+        // Track work time
+        if (currentMode === 'work') {
+            totalWorkSeconds++;
+            updateTotalWorkTimeDisplay();
+        }
+
         updateDisplay();
         setProgress(timeLeft);
         saveState();
@@ -114,6 +214,7 @@ function pauseTimer() {
     updateStateVisuals();
     updateButtons();
     saveState();
+    notifyTimerState();
 }
 
 function stopTimer() {
@@ -124,41 +225,57 @@ function stopTimer() {
     updateButtons();
     setProgress(totalTime);
     saveState();
+    notifyTimerState();
 }
 
 function resetTimer() {
     if (currentMode === 'work') {
         timeLeft = WORK_TIME;
         totalTime = WORK_TIME;
-    } else if (currentMode === 'shortBreak') {
-        timeLeft = SHORT_BREAK_TIME;
-        totalTime = SHORT_BREAK_TIME;
-    } else if (currentMode === 'longBreak') {
-        timeLeft = LONG_BREAK_TIME;
-        totalTime = LONG_BREAK_TIME;
+    } else if (currentMode === 'waiting') {
+        timeLeft = BREAK_TIME;
+        totalTime = BREAK_TIME;
     }
     updateDisplay();
 }
 
 function completeCycle() {
     // Show notification
+    const notificationBody = currentMode === 'work' ? 'Thời gian làm việc kết thúc!' : 'Thời gian nghỉ kết thúc!';
     new Notification('Pomodoro Timer', {
-        body: 'Timer Finished!',
+        body: notificationBody,
         icon: 'assets/icon.png'
     });
 
     if (currentMode === 'work') {
+        // Work finished -> switch to break
         cycleCount++;
         cycleCountDisplay.textContent = cycleCount;
-        switchMode('waiting'); // Switch to waiting mode after work
-    } else {
-        switchMode('work'); // Switch back to work after waiting
-    }
+        switchMode('waiting');
 
-    timerState = 'stopped';
-    updateButtons();
-    updateStateVisuals();
-    saveState();
+        timerState = 'stopped';
+        updateButtons();
+        updateStateVisuals();
+        saveState();
+
+        // Auto-loop: only auto-start break after work
+        if (AUTO_LOOP) {
+            setTimeout(() => {
+                startTimer();
+            }, 1000);
+        }
+    } else {
+        // Break finished -> switch to work, show popup and shake
+        switchMode('work');
+
+        timerState = 'stopped';
+        updateButtons();
+        updateStateVisuals();
+        saveState();
+
+        // Request main process to exit bubble mode (if in bubble) and shake
+        ipcRenderer.send('break-finished');
+    }
 }
 
 function switchMode(mode) {
@@ -168,20 +285,27 @@ function switchMode(mode) {
         totalTime = WORK_TIME;
         modeText.textContent = 'POMODORO';
     } else if (mode === 'waiting') {
-        timeLeft = SHORT_BREAK_TIME;
-        totalTime = SHORT_BREAK_TIME;
-        modeText.textContent = 'WAITING';
-    } else if (mode === 'shortBreak') {
-        timeLeft = SHORT_BREAK_TIME;
-        totalTime = SHORT_BREAK_TIME;
-        modeText.textContent = 'SHORT BREAK';
-    } else if (mode === 'longBreak') {
-        timeLeft = LONG_BREAK_TIME;
-        totalTime = LONG_BREAK_TIME;
-        modeText.textContent = 'LONG BREAK';
+        timeLeft = BREAK_TIME;
+        totalTime = BREAK_TIME;
+        modeText.textContent = 'NGHỈ NGƠI';
     }
     updateDisplay();
     setProgress(totalTime);
+
+    // Notify main process about mode change
+    ipcRenderer.send('timer-mode-changed', mode);
+}
+
+// Notify main process about timer state changes
+function notifyTimerState() {
+    ipcRenderer.send('timer-state-changed', timerState);
+}
+
+// Update total work time display
+function updateTotalWorkTimeDisplay() {
+    const hours = Math.floor(totalWorkSeconds / 3600);
+    const minutes = Math.floor((totalWorkSeconds % 3600) / 60);
+    totalWorkTimeDisplay.textContent = `${hours}h ${minutes}m`;
 }
 
 // UI Updates
@@ -247,6 +371,17 @@ startBtn.addEventListener('click', startTimer);
 pauseBtn.addEventListener('click', pauseTimer);
 stopBtn.addEventListener('click', stopTimer);
 
+// Settings Event Listeners
+settingsBtn.addEventListener('click', () => {
+    settingsPanel.classList.toggle('hidden');
+});
+
+settingsClose.addEventListener('click', () => {
+    settingsPanel.classList.add('hidden');
+});
+
+saveSettingsBtn.addEventListener('click', applySettings);
+
 // Click on progress ring to toggle timer
 iconTrigger.addEventListener('click', () => {
     if (timerState === 'running') {
@@ -300,19 +435,6 @@ ipcRenderer.on('start-shaking', () => {
 
 ipcRenderer.on('stop-shaking', () => {
     body.classList.remove('shaking');
-});
-
-// Stop shaking on any user interaction
-document.addEventListener('click', () => {
-    if (body.classList.contains('shaking')) {
-        body.classList.remove('shaking');
-    }
-});
-
-document.addEventListener('mousemove', () => {
-    if (body.classList.contains('shaking')) {
-        body.classList.remove('shaking');
-    }
 });
 
 // Initialize

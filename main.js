@@ -5,7 +5,10 @@ let mainWindow;
 let tray;
 let isBubbleMode = false;
 let idleCheckInterval = null;
-const IDLE_THRESHOLD = 10; // seconds
+let isShaking = false; // Track if currently shaking
+let currentTimerMode = 'work'; // Track timer mode: 'work' or 'waiting'
+let currentTimerState = 'stopped'; // Track timer state: 'running', 'paused', 'stopped'
+let IDLE_THRESHOLD = 10; // seconds (can be changed via settings)
 
 const FULL_WIDTH = 320;
 const FULL_HEIGHT = 520;
@@ -85,7 +88,6 @@ function toggleBubbleMode() {
         mainWindow.setMinimumSize(BUBBLE_WINDOW_SIZE, BUBBLE_WINDOW_SIZE);
         mainWindow.setSize(BUBBLE_WINDOW_SIZE, BUBBLE_WINDOW_SIZE);
         mainWindow.webContents.send('bubble-mode', true);
-        startIdleCheck();
 
         // Move to bottom-right corner
         const primaryDisplay = screen.getPrimaryDisplay();
@@ -98,7 +100,6 @@ function toggleBubbleMode() {
         mainWindow.setSize(FULL_WIDTH, FULL_HEIGHT);
         mainWindow.webContents.send('bubble-mode', false);
         mainWindow.webContents.send('stop-shaking');
-        stopIdleCheck();
 
         // Center window when exiting bubble mode (zoom in)
         const primaryDisplay = screen.getPrimaryDisplay();
@@ -113,9 +114,19 @@ function startIdleCheck() {
     stopIdleCheck();
     idleCheckInterval = setInterval(() => {
         const idleTime = powerMonitor.getSystemIdleTime();
-        if (idleTime >= IDLE_THRESHOLD && isBubbleMode) {
-            // Exit bubble mode, center window, and shake
-            exitBubbleAndShake();
+        // Only trigger idle shake when:
+        // 1. In work mode
+        // 2. Timer is RUNNING (not paused or stopped - freeze mode)
+        // 3. Not already shaking
+        // Works in both bubble mode and popup mode
+        if (idleTime >= IDLE_THRESHOLD && currentTimerMode === 'work' && currentTimerState === 'running' && !isShaking) {
+            // Show popup, center window, and shake
+            showPopupAndShake();
+        }
+
+        // Stop shaking when user returns (idle time resets)
+        if (isShaking && idleTime < IDLE_THRESHOLD) {
+            stopShaking();
         }
     }, 1000);
 }
@@ -146,6 +157,37 @@ function exitBubbleAndShake() {
     mainWindow.webContents.send('start-shaking');
 }
 
+function showPopupAndShake() {
+    // If in bubble mode, exit it first
+    if (isBubbleMode) {
+        isBubbleMode = false;
+        mainWindow.setMinimumSize(FULL_WIDTH, FULL_HEIGHT);
+        mainWindow.setSize(FULL_WIDTH, FULL_HEIGHT);
+        mainWindow.webContents.send('bubble-mode', false);
+    }
+
+    // Center window on screen
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+    const x = Math.round((width - FULL_WIDTH) / 2);
+    const y = Math.round((height - FULL_HEIGHT) / 2);
+    mainWindow.setPosition(x, y);
+
+    // Show window if hidden
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+
+    // Start shaking continuously
+    isShaking = true;
+    mainWindow.webContents.send('start-shaking');
+}
+
+function stopShaking() {
+    isShaking = false;
+    mainWindow.webContents.send('stop-shaking');
+}
+
 // IPC handlers
 ipcMain.on('toggle-bubble', () => {
     toggleBubbleMode();
@@ -159,9 +201,52 @@ ipcMain.on('minimize-to-tray', () => {
     mainWindow.hide();
 });
 
+// Listen for timer mode changes from renderer
+ipcMain.on('timer-mode-changed', (event, mode) => {
+    currentTimerMode = mode;
+});
+
+// Listen for timer state changes from renderer
+ipcMain.on('timer-state-changed', (event, state) => {
+    currentTimerState = state;
+});
+
+// Listen for idle time setting changes from renderer
+ipcMain.on('idle-time-changed', (event, idleTime) => {
+    IDLE_THRESHOLD = idleTime;
+});
+
+// Handle break finished - show popup and shake
+ipcMain.on('break-finished', () => {
+    // If in bubble mode, exit it first
+    if (isBubbleMode) {
+        isBubbleMode = false;
+        mainWindow.setMinimumSize(FULL_WIDTH, FULL_HEIGHT);
+        mainWindow.setSize(FULL_WIDTH, FULL_HEIGHT);
+        mainWindow.webContents.send('bubble-mode', false);
+        stopIdleCheck();
+    }
+
+    // Center window on screen
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+    const x = Math.round((width - FULL_WIDTH) / 2);
+    const y = Math.round((height - FULL_HEIGHT) / 2);
+    mainWindow.setPosition(x, y);
+
+    // Show window if hidden
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+
+    // Start shaking
+    mainWindow.webContents.send('start-shaking');
+});
+
 app.whenReady().then(() => {
     createWindow();
     createTray();
+    startIdleCheck(); // Start idle check on app launch
 });
 
 app.on('window-all-closed', () => {
