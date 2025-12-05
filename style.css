@@ -442,10 +442,20 @@ body.bubble-mode .progress-container {
     height: 80px;
     margin: 0;
     -webkit-app-region: drag;
-    cursor: move;
+    cursor: grab;
     overflow: visible;
     background: rgba(30, 30, 46, 0.95);
     border-radius: 50%;
+    transition: box-shadow 0.2s ease;
+}
+
+body.bubble-mode .progress-container:hover {
+    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.4);
+}
+
+body.bubble-mode .progress-container:active {
+    cursor: grabbing;
+    box-shadow: 0 0 0 4px rgba(79, 172, 254, 0.6);
 }
 
 body.bubble-mode .icon-wrapper {

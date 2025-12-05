@@ -216,7 +216,7 @@ ipcMain.on('idle-time-changed', (event, idleTime) => {
     IDLE_THRESHOLD = idleTime;
 });
 
-// Handle break finished - show popup and shake
+// Handle break finished - show popup and shake until user activity detected
 ipcMain.on('break-finished', () => {
     // If in bubble mode, exit it first
     if (isBubbleMode) {
@@ -224,7 +224,6 @@ ipcMain.on('break-finished', () => {
         mainWindow.setMinimumSize(FULL_WIDTH, FULL_HEIGHT);
         mainWindow.setSize(FULL_WIDTH, FULL_HEIGHT);
         mainWindow.webContents.send('bubble-mode', false);
-        stopIdleCheck();
     }
 
     // Center window on screen
@@ -239,9 +238,31 @@ ipcMain.on('break-finished', () => {
         mainWindow.show();
     }
 
-    // Start shaking
+    // Start shaking and track state
+    isShaking = true;
     mainWindow.webContents.send('start-shaking');
+
+    // Start checking for user activity to stop shaking
+    startBreakShakeCheck();
 });
+
+let breakShakeCheckInterval = null;
+
+function startBreakShakeCheck() {
+    if (breakShakeCheckInterval) {
+        clearInterval(breakShakeCheckInterval);
+    }
+
+    breakShakeCheckInterval = setInterval(() => {
+        const idleTime = powerMonitor.getSystemIdleTime();
+        // Stop shaking when user activity detected (idle time < 2 seconds)
+        if (isShaking && idleTime < 2) {
+            stopShaking();
+            clearInterval(breakShakeCheckInterval);
+            breakShakeCheckInterval = null;
+        }
+    }, 500);
+}
 
 app.whenReady().then(() => {
     createWindow();
