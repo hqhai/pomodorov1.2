@@ -5,6 +5,7 @@ let WORK_TIME = 25 * 60;
 let BREAK_TIME = 5 * 60;
 let IDLE_TIME = 10; // seconds
 let AUTO_LOOP = true;
+let VIBE_CODING_MODE = false; // New Vibe Coding mode setting
 
 const CIRCLE_RADIUS = 100;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -17,6 +18,7 @@ let currentMode = 'work';
 let timerState = 'stopped';
 let cycleCount = 0;
 let totalWorkSeconds = 0; // Total work time in seconds
+let totalVibeCodingSeconds = 0; // Total Vibe Coding time in seconds
 
 // DOM Elements
 const timeDisplay = document.getElementById('time');
@@ -44,6 +46,7 @@ const workTimeInput = document.getElementById('work-time-input');
 const breakTimeInput = document.getElementById('break-time-input');
 const idleTimeInput = document.getElementById('idle-time-input');
 const autoLoopToggle = document.getElementById('auto-loop-toggle');
+const vibeCodingToggle = document.getElementById('vibe-coding-toggle');
 const saveSettingsBtn = document.getElementById('save-settings');
 
 // Initialize
@@ -70,6 +73,7 @@ function loadSettings() {
         BREAK_TIME = settings.breakTime || 5 * 60;
         IDLE_TIME = settings.idleTime || 10;
         AUTO_LOOP = settings.autoLoop !== undefined ? settings.autoLoop : true;
+        VIBE_CODING_MODE = settings.vibeCodingMode !== undefined ? settings.vibeCodingMode : false;
     }
 
     // Update input fields
@@ -77,6 +81,7 @@ function loadSettings() {
     breakTimeInput.value = Math.floor(BREAK_TIME / 60);
     idleTimeInput.value = IDLE_TIME;
     autoLoopToggle.checked = AUTO_LOOP;
+    vibeCodingToggle.checked = VIBE_CODING_MODE;
 
     // Send idle time to main process
     ipcRenderer.send('idle-time-changed', IDLE_TIME);
@@ -93,7 +98,8 @@ function saveSettings() {
         workTime: WORK_TIME,
         breakTime: BREAK_TIME,
         idleTime: IDLE_TIME,
-        autoLoop: AUTO_LOOP
+        autoLoop: AUTO_LOOP,
+        vibeCodingMode: VIBE_CODING_MODE
     };
     localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
 }
@@ -103,11 +109,13 @@ function applySettings() {
     const newBreakTime = parseInt(breakTimeInput.value) * 60;
     const newIdleTime = parseInt(idleTimeInput.value);
     const newAutoLoop = autoLoopToggle.checked;
+    const newVibeCodingMode = vibeCodingToggle.checked;
 
     WORK_TIME = newWorkTime;
     BREAK_TIME = newBreakTime;
     IDLE_TIME = newIdleTime;
     AUTO_LOOP = newAutoLoop;
+    VIBE_CODING_MODE = newVibeCodingMode;
 
     saveSettings();
 
@@ -140,7 +148,9 @@ function saveState() {
         timerState,
         cycleCount,
         totalWorkSeconds,
-        lastUpdated: Date.now()
+        totalVibeCodingSeconds,
+        lastUpdated: Date.now(),
+        currentDate: getTodayString()
     };
     localStorage.setItem('pomodoroState', JSON.stringify(state));
 }
@@ -150,32 +160,92 @@ function loadState() {
     if (saved) {
         const state = JSON.parse(saved);
         const elapsed = Math.floor((Date.now() - state.lastUpdated) / 1000);
+        const savedDate = state.currentDate || getTodayString();
+        const today = getTodayString();
 
-        timeLeft = state.timeLeft;
-        totalTime = state.totalTime;
-        currentMode = state.currentMode;
-        timerState = state.timerState;
-        cycleCount = state.cycleCount || 0;
-        totalWorkSeconds = state.totalWorkSeconds || 0;
+        // Check if it's a new day - export and reset
+        if (savedDate !== today) {
+            exportDailyStats(savedDate, state.cycleCount || 0, state.totalWorkSeconds || 0);
+            // Reset for new day
+            cycleCount = 0;
+            totalWorkSeconds = 0;
+            totalVibeCodingSeconds = 0;
+            timeLeft = WORK_TIME;
+            totalTime = WORK_TIME;
+            currentMode = 'work';
+            timerState = 'stopped';
+        } else {
+            timeLeft = state.timeLeft;
+            totalTime = state.totalTime;
+            currentMode = state.currentMode;
+            timerState = state.timerState;
+            cycleCount = state.cycleCount || 0;
+            totalWorkSeconds = state.totalWorkSeconds || 0;
+            totalVibeCodingSeconds = state.totalVibeCodingSeconds || 0;
 
-        if (timerState === 'running') {
-            // Add elapsed work time if was in work mode
-            if (currentMode === 'work') {
-                totalWorkSeconds += elapsed;
-            }
-            timeLeft -= elapsed;
-            if (timeLeft <= 0) {
-                timeLeft = 0;
-                timerState = 'stopped';
-                completeCycle();
-            } else {
-                startTimer();
+            if (timerState === 'running') {
+                // Add elapsed work time if was in work mode
+                if (currentMode === 'work') {
+                    if (VIBE_CODING_MODE) {
+                        totalVibeCodingSeconds += elapsed;
+                    } else {
+                        totalWorkSeconds += elapsed;
+                    }
+                }
+                timeLeft -= elapsed;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    timerState = 'stopped';
+                    completeCycle();
+                } else {
+                    startTimer();
+                }
             }
         }
 
         cycleCountDisplay.textContent = cycleCount;
         updateTotalWorkTimeDisplay();
     }
+}
+
+// Get today's date as string (YYYY-MM-DD)
+function getTodayString() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+// Export daily stats to txt file
+function exportDailyStats(date, cycles, workSeconds, vibeCodingSeconds = 0) {
+    const hours = Math.floor(workSeconds / 3600);
+    const minutes = Math.floor((workSeconds % 3600) / 60);
+    const seconds = workSeconds % 60;
+
+    const vibeHours = Math.floor(vibeCodingSeconds / 3600);
+    const vibeMinutes = Math.floor((vibeCodingSeconds % 3600) / 60);
+    const vibeSeconds = vibeCodingSeconds % 60;
+
+    const totalSeconds = workSeconds + vibeCodingSeconds;
+    const totalHours = Math.floor(totalSeconds / 3600);
+    const totalMinutes = Math.floor((totalSeconds % 3600) / 60);
+
+    let content = `=== Pomodoro Timer - Báo cáo ngày ${date} ===
+
+Số chu kỳ hoàn thành: ${cycles}
+Tổng thời gian làm việc: ${hours}h ${minutes}m ${seconds}s`;
+
+    if (vibeCodingSeconds > 0) {
+        content += `\nThời gian Vibe Coding: ${vibeHours}h ${vibeMinutes}m ${vibeSeconds}s`;
+    }
+
+    content += `\nTổng thời gian: ${totalHours}h ${totalMinutes}m
+Tổng số giây: ${totalSeconds}
+
+---
+Xuất lúc: ${new Date().toLocaleString('vi-VN')}
+`;
+
+    // Send to main process to save file
+    ipcRenderer.send('export-daily-stats', { date, content });
 }
 
 // Timer Logic
@@ -192,7 +262,11 @@ function startTimer() {
 
         // Track work time
         if (currentMode === 'work') {
-            totalWorkSeconds++;
+            if (VIBE_CODING_MODE) {
+                totalVibeCodingSeconds++;
+            } else {
+                totalWorkSeconds++;
+            }
             updateTotalWorkTimeDisplay();
         }
 
@@ -303,9 +377,22 @@ function notifyTimerState() {
 
 // Update total work time display
 function updateTotalWorkTimeDisplay() {
-    const hours = Math.floor(totalWorkSeconds / 3600);
-    const minutes = Math.floor((totalWorkSeconds % 3600) / 60);
+    const totalSeconds = totalWorkSeconds + totalVibeCodingSeconds;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
     totalWorkTimeDisplay.textContent = `${hours}h ${minutes}m`;
+
+    // If in Vibe Coding mode, update the display text to show it
+    if (VIBE_CODING_MODE && totalVibeCodingSeconds > 0) {
+        const vibeHours = Math.floor(totalVibeCodingSeconds / 3600);
+        const vibeMinutes = Math.floor((totalVibeCodingSeconds % 3600) / 60);
+        totalWorkTimeDisplay.style.color = '#FDD357'; // Yellow color for Vibe Coding
+        // Add tooltip or additional info if needed
+        totalWorkTimeDisplay.title = `Vibe Coding: ${vibeHours}h ${vibeMinutes}m`;
+    } else {
+        totalWorkTimeDisplay.style.color = '#4facfe'; // Default blue color
+        totalWorkTimeDisplay.title = '';
+    }
 }
 
 // UI Updates
@@ -324,27 +411,37 @@ function updateStateVisuals() {
     if (timerState === 'running') {
         if (currentMode === 'waiting') {
             statusIcon.src = 'assets/waiting.gif';
-            statusIcon.classList.remove('fire', 'ice');
+            statusIcon.classList.remove('fire', 'ice', 'vibe');
             statusIcon.classList.add('waiting');
             progressCircle.style.stroke = '#4CAF50'; // Green color for waiting
         } else {
-            statusIcon.src = 'assets/Fire.gif';
-            statusIcon.classList.add('fire');
-            statusIcon.classList.remove('ice', 'waiting');
-            progressCircle.style.stroke = '#ff6b6b'; // Red color for work
+            if (VIBE_CODING_MODE) {
+                statusIcon.src = 'assets/vibeCoding.gif';
+                statusIcon.classList.add('vibe');
+                statusIcon.classList.remove('fire', 'ice', 'waiting');
+                progressCircle.style.stroke = '#FDD357'; // Yellow color for Vibe Coding
+                body.classList.add('vibe-mode');
+            } else {
+                statusIcon.src = 'assets/Fire.gif';
+                statusIcon.classList.add('fire');
+                statusIcon.classList.remove('ice', 'waiting', 'vibe');
+                progressCircle.style.stroke = '#ff6b6b'; // Red color for work
+                body.classList.remove('vibe-mode');
+            }
         }
         body.classList.remove('paused-state');
     } else {
         if (currentMode === 'waiting') {
             statusIcon.src = 'assets/waiting.gif';
-            statusIcon.classList.remove('fire', 'ice');
+            statusIcon.classList.remove('fire', 'ice', 'vibe');
             statusIcon.classList.add('waiting');
             progressCircle.style.stroke = '#4CAF50'; // Green color for waiting
         } else {
             statusIcon.src = 'assets/freeze.webp';
             statusIcon.classList.add('ice');
-            statusIcon.classList.remove('fire', 'waiting');
+            statusIcon.classList.remove('fire', 'waiting', 'vibe');
             progressCircle.style.stroke = '#4facfe'; // Blue color for frozen state
+            body.classList.remove('vibe-mode');
         }
         body.classList.add('paused-state');
     }
@@ -366,10 +463,36 @@ function updateButtons() {
     }
 }
 
+// Reset Stats Button
+const resetStatsBtn = document.getElementById('reset-stats-btn');
+
+// Reset stats function
+function resetStats() {
+    const today = getTodayString();
+
+    // Export current stats before reset
+    if (cycleCount > 0 || totalWorkSeconds > 0 || totalVibeCodingSeconds > 0) {
+        exportDailyStats(today, cycleCount, totalWorkSeconds, totalVibeCodingSeconds);
+    }
+
+    // Reset values
+    cycleCount = 0;
+    totalWorkSeconds = 0;
+    totalVibeCodingSeconds = 0;
+
+    // Update display
+    cycleCountDisplay.textContent = cycleCount;
+    updateTotalWorkTimeDisplay();
+
+    // Save state
+    saveState();
+}
+
 // Event Listeners
 startBtn.addEventListener('click', startTimer);
 pauseBtn.addEventListener('click', pauseTimer);
 stopBtn.addEventListener('click', stopTimer);
+resetStatsBtn.addEventListener('click', resetStats);
 
 // Settings Event Listeners
 settingsBtn.addEventListener('click', () => {
@@ -381,6 +504,14 @@ settingsClose.addEventListener('click', () => {
 });
 
 saveSettingsBtn.addEventListener('click', applySettings);
+
+// Vibe Coding toggle immediate update
+vibeCodingToggle.addEventListener('change', () => {
+    VIBE_CODING_MODE = vibeCodingToggle.checked;
+    saveSettings(); // Save immediately
+    updateStateVisuals(); // Update visuals immediately
+    updateTotalWorkTimeDisplay(); // Update display color
+});
 
 // Click on progress ring to toggle timer
 iconTrigger.addEventListener('click', () => {

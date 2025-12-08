@@ -161,6 +161,11 @@ html, body {
     filter: drop-shadow(0 0 10px rgba(76, 175, 80, 0.6));
 }
 
+.status-icon.vibe {
+    animation: pulse 2s infinite ease-in-out;
+    filter: drop-shadow(0 0 10px rgba(253, 211, 87, 0.8));
+}
+
 /* Timer Info */
 .timer-info {
     text-align: center;
@@ -228,6 +233,27 @@ html, body {
 .footer-info .total-time {
     color: var(--accent-ice);
     font-weight: 600;
+}
+
+.reset-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    color: var(--secondary-text);
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.reset-btn:hover {
+    background: rgba(255, 71, 87, 0.3);
+    color: #ff4757;
+    transform: rotate(-180deg);
 }
 
 /* Settings Button */
@@ -484,6 +510,15 @@ body.bubble-mode:not(.paused-state) .progress-ring__circle-bg {
     stroke: rgba(255, 107, 107, 0.2);
 }
 
+/* Vibe Coding mode in bubble */
+body.bubble-mode:not(.paused-state).vibe-mode .progress-ring {
+    filter: drop-shadow(0 0 10px rgba(253, 211, 87, 0.6));
+}
+
+body.bubble-mode:not(.paused-state).vibe-mode .progress-ring__circle-bg {
+    stroke: rgba(253, 211, 87, 0.2);
+}
+
 body.bubble-mode .icon-wrapper {
     width: 65%;
     height: 65%;
@@ -495,6 +530,10 @@ body.bubble-mode .status-icon.ice {
 
 body.bubble-mode .status-icon.fire {
     filter: drop-shadow(0 0 15px rgba(255, 107, 107, 0.8));
+}
+
+body.bubble-mode .status-icon.vibe {
+    filter: drop-shadow(0 0 15px rgba(253, 211, 87, 0.8));
 }
 
 body.bubble-mode .status-icon.waiting {

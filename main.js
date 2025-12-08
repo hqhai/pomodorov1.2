@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, powerMonitor } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
 let tray;
@@ -214,6 +215,24 @@ ipcMain.on('timer-state-changed', (event, state) => {
 // Listen for idle time setting changes from renderer
 ipcMain.on('idle-time-changed', (event, idleTime) => {
     IDLE_THRESHOLD = idleTime;
+});
+
+// Handle export daily stats to txt file
+ipcMain.on('export-daily-stats', (event, { date, content }) => {
+    // Save to user's Documents folder
+    const documentsPath = app.getPath('documents');
+    const statsFolder = path.join(documentsPath, 'PomodoroStats');
+
+    // Create folder if not exists
+    if (!fs.existsSync(statsFolder)) {
+        fs.mkdirSync(statsFolder, { recursive: true });
+    }
+
+    const fileName = `pomodoro-${date}.txt`;
+    const filePath = path.join(statsFolder, fileName);
+
+    fs.writeFileSync(filePath, content, 'utf8');
+    console.log(`Daily stats exported to: ${filePath}`);
 });
 
 // Handle break finished - show popup and shake until user activity detected
