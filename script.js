@@ -6,6 +6,7 @@ let BREAK_TIME = 5 * 60;
 let IDLE_TIME = 10; // seconds
 let AUTO_LOOP = true;
 let VIBE_CODING_MODE = false; // New Vibe Coding mode setting
+let AUTO_STOP_CONTINUE = false; // New auto-stop/continue setting
 
 const CIRCLE_RADIUS = 100;
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -47,6 +48,7 @@ const breakTimeInput = document.getElementById('break-time-input');
 const idleTimeInput = document.getElementById('idle-time-input');
 const autoLoopToggle = document.getElementById('auto-loop-toggle');
 const vibeCodingToggle = document.getElementById('vibe-coding-toggle');
+const autoStopContinueToggle = document.getElementById('auto-stop-continue-toggle');
 const saveSettingsBtn = document.getElementById('save-settings');
 
 // Initialize
@@ -74,6 +76,7 @@ function loadSettings() {
         IDLE_TIME = settings.idleTime || 10;
         AUTO_LOOP = settings.autoLoop !== undefined ? settings.autoLoop : true;
         VIBE_CODING_MODE = settings.vibeCodingMode !== undefined ? settings.vibeCodingMode : false;
+        AUTO_STOP_CONTINUE = settings.autoStopContinue !== undefined ? settings.autoStopContinue : false;
     }
 
     // Update input fields
@@ -82,9 +85,16 @@ function loadSettings() {
     idleTimeInput.value = IDLE_TIME;
     autoLoopToggle.checked = AUTO_LOOP;
     vibeCodingToggle.checked = VIBE_CODING_MODE;
+    autoStopContinueToggle.checked = AUTO_STOP_CONTINUE;
 
     // Send idle time to main process
     ipcRenderer.send('idle-time-changed', IDLE_TIME);
+
+    // Send auto-stop/continue setting to main process
+    ipcRenderer.send('auto-stop-continue-changed', AUTO_STOP_CONTINUE);
+
+    // Send Vibe Coding mode state to main process
+    ipcRenderer.send('vibe-coding-mode-changed', VIBE_CODING_MODE);
 
     // Update timeLeft if timer is stopped
     if (timerState === 'stopped' && currentMode === 'work') {
@@ -99,7 +109,8 @@ function saveSettings() {
         breakTime: BREAK_TIME,
         idleTime: IDLE_TIME,
         autoLoop: AUTO_LOOP,
-        vibeCodingMode: VIBE_CODING_MODE
+        vibeCodingMode: VIBE_CODING_MODE,
+        autoStopContinue: AUTO_STOP_CONTINUE
     };
     localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
 }
@@ -110,17 +121,22 @@ function applySettings() {
     const newIdleTime = parseInt(idleTimeInput.value);
     const newAutoLoop = autoLoopToggle.checked;
     const newVibeCodingMode = vibeCodingToggle.checked;
+    const newAutoStopContinue = autoStopContinueToggle.checked;
 
     WORK_TIME = newWorkTime;
     BREAK_TIME = newBreakTime;
     IDLE_TIME = newIdleTime;
     AUTO_LOOP = newAutoLoop;
     VIBE_CODING_MODE = newVibeCodingMode;
+    AUTO_STOP_CONTINUE = newAutoStopContinue;
 
     saveSettings();
 
     // Send idle time to main process
     ipcRenderer.send('idle-time-changed', IDLE_TIME);
+
+    // Send auto-stop/continue setting to main process
+    ipcRenderer.send('auto-stop-continue-changed', AUTO_STOP_CONTINUE);
 
     // Reset timer if stopped
     if (timerState === 'stopped') {
@@ -511,6 +527,8 @@ vibeCodingToggle.addEventListener('change', () => {
     saveSettings(); // Save immediately
     updateStateVisuals(); // Update visuals immediately
     updateTotalWorkTimeDisplay(); // Update display color
+    // Send Vibe Coding mode state to main process
+    ipcRenderer.send('vibe-coding-mode-changed', VIBE_CODING_MODE);
 });
 
 // Click on progress ring to toggle timer
@@ -566,6 +584,124 @@ ipcRenderer.on('start-shaking', () => {
 
 ipcRenderer.on('stop-shaking', () => {
     body.classList.remove('shaking');
+});
+
+// CSS animations are now handled inline
+
+// IPC: Listen for auto-stop event
+ipcRenderer.on('auto-stop', () => {
+    if (timerState === 'running' && AUTO_STOP_CONTINUE) {
+        // Only show indicator if NOT in bubble mode
+        if (!body.classList.contains('bubble-mode')) {
+            // Create indicator with absolute positioning relative to window, not body
+            const indicator = document.createElement('div');
+            indicator.className = 'auto-indicator';
+            indicator.textContent = '⏸ Tự động dừng';
+
+            // Use window dimensions for positioning
+            const left = window.innerWidth / 2;
+            const top = window.innerHeight / 2;
+
+            indicator.style.cssText = `
+                position: fixed;
+                top: ${top}px;
+                left: ${left}px;
+                transform: translate(-50%, -50%);
+                background: #ffc107;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: bold;
+                z-index: 10000;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            `;
+
+            // Add to document.body, not the body element in the DOM
+            document.body.appendChild(indicator);
+
+            // Fade in
+            requestAnimationFrame(() => {
+                indicator.style.opacity = '1';
+            });
+
+            // Fade out and remove
+            setTimeout(() => {
+                indicator.style.opacity = '0';
+                setTimeout(() => {
+                    if (indicator.parentNode) {
+                        indicator.parentNode.removeChild(indicator);
+                    }
+                }, 300);
+            }, 800);
+        }
+
+        // Pause timer with a slight delay to avoid conflicts
+        requestAnimationFrame(() => {
+            pauseTimer();
+        });
+    }
+});
+
+// IPC: Listen for auto-continue event
+ipcRenderer.on('auto-continue', () => {
+    if (timerState === 'paused' && AUTO_STOP_CONTINUE) {
+        // Only show indicator if NOT in bubble mode
+        if (!body.classList.contains('bubble-mode')) {
+            // Create indicator with absolute positioning
+            const indicator = document.createElement('div');
+            indicator.className = 'auto-indicator';
+            indicator.textContent = '▶ Tự động tiếp tục';
+
+            // Use window dimensions for positioning
+            const left = window.innerWidth / 2;
+            const top = window.innerHeight / 2;
+
+            indicator.style.cssText = `
+                position: fixed;
+                top: ${top}px;
+                left: ${left}px;
+                transform: translate(-50%, -50%);
+                background: #4caf50;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: bold;
+                z-index: 10000;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            `;
+
+            // Add to document.body
+            document.body.appendChild(indicator);
+
+            // Fade in
+            requestAnimationFrame(() => {
+                indicator.style.opacity = '1';
+            });
+
+            // Fade out and remove
+            setTimeout(() => {
+                indicator.style.opacity = '0';
+                setTimeout(() => {
+                    if (indicator.parentNode) {
+                        indicator.parentNode.removeChild(indicator);
+                    }
+                }, 300);
+            }, 800);
+        }
+
+        // Start timer with a slight delay to avoid conflicts
+        requestAnimationFrame(() => {
+            startTimer();
+        });
+    }
 });
 
 // Initialize

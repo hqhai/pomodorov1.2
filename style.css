@@ -583,3 +583,12 @@ body.bubble-mode .bubble-exit-btn:hover {
 body.shaking .window-frame {
     animation: shake 0.5s ease-in-out infinite;
 }
+
+/* Auto-indicator styles are now handled dynamically in JavaScript */
+
+/* For bubble mode - indicator handled by the same popup indicator as normal mode */
+
+/* Vibe Mode Styles */
+body.vibe-mode .window-frame {
+    background: linear-gradient(135deg, #2a1a3e 0%, #3a1f5e 50%, #4a267e 100%);
+}

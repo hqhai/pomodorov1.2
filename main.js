@@ -10,6 +10,9 @@ let isShaking = false; // Track if currently shaking
 let currentTimerMode = 'work'; // Track timer mode: 'work' or 'waiting'
 let currentTimerState = 'stopped'; // Track timer state: 'running', 'paused', 'stopped'
 let IDLE_THRESHOLD = 10; // seconds (can be changed via settings)
+let AUTO_STOP_CONTINUE = false; // Auto-stop/continue feature toggle
+let wasAutoStopped = false; // Track if timer was auto-stopped
+let isVibeCodingMode = false; // Track if Vibe Coding mode is active
 
 const FULL_WIDTH = 320;
 const FULL_HEIGHT = 520;
@@ -115,19 +118,39 @@ function startIdleCheck() {
     stopIdleCheck();
     idleCheckInterval = setInterval(() => {
         const idleTime = powerMonitor.getSystemIdleTime();
-        // Only trigger idle shake when:
-        // 1. In work mode
-        // 2. Timer is RUNNING (not paused or stopped - freeze mode)
-        // 3. Not already shaking
-        // Works in both bubble mode and popup mode
-        if (idleTime >= IDLE_THRESHOLD && currentTimerMode === 'work' && currentTimerState === 'running' && !isShaking) {
-            // Show popup, center window, and shake
-            showPopupAndShake();
-        }
 
-        // Stop shaking when user returns (idle time resets)
-        if (isShaking && idleTime < IDLE_THRESHOLD) {
-            stopShaking();
+        // Handle auto-stop/continue feature
+        if (AUTO_STOP_CONTINUE && !isVibeCodingMode) {
+            // Auto-stop when idle threshold reached and timer is running
+            // Only if NOT in Vibe Coding mode
+            if (idleTime >= IDLE_THRESHOLD && currentTimerState === 'running' && !wasAutoStopped) {
+                mainWindow.webContents.send('auto-stop');
+                wasAutoStopped = true;
+            }
+
+            // Auto-continue when user returns and timer was auto-stopped
+            if (idleTime < 2 && wasAutoStopped) {
+                mainWindow.webContents.send('auto-continue');
+                wasAutoStopped = false;
+            }
+        } else if (!AUTO_STOP_CONTINUE && !isVibeCodingMode) {
+            // Original shake behavior when auto-stop/continue is disabled
+            // AND NOT in Vibe Coding mode
+            // Only trigger idle shake when:
+            // 1. In work mode
+            // 2. Timer is RUNNING (not paused or stopped - freeze mode)
+            // 3. Not already shaking
+            // 4. NOT in Vibe Coding mode
+            // Works in both bubble mode and popup mode
+            if (idleTime >= IDLE_THRESHOLD && currentTimerMode === 'work' && currentTimerState === 'running' && !isShaking) {
+                // Show popup, center window, and shake
+                showPopupAndShake();
+            }
+
+            // Stop shaking when user returns (idle time resets)
+            if (isShaking && idleTime < IDLE_THRESHOLD) {
+                stopShaking();
+            }
         }
     }, 1000);
 }
@@ -215,6 +238,22 @@ ipcMain.on('timer-state-changed', (event, state) => {
 // Listen for idle time setting changes from renderer
 ipcMain.on('idle-time-changed', (event, idleTime) => {
     IDLE_THRESHOLD = idleTime;
+});
+
+// Listen for auto-stop/continue setting changes from renderer
+ipcMain.on('auto-stop-continue-changed', (event, autoStopContinue) => {
+    AUTO_STOP_CONTINUE = autoStopContinue;
+    // Reset the auto-stopped state when setting changes
+    wasAutoStopped = false;
+});
+
+// Listen for Vibe Coding mode changes from renderer
+ipcMain.on('vibe-coding-mode-changed', (event, isVibeCoding) => {
+    isVibeCodingMode = isVibeCoding;
+    // Reset auto-stopped state when Vibe Coding mode is toggled
+    if (isVibeCoding && wasAutoStopped) {
+        wasAutoStopped = false;
+    }
 });
 
 // Handle export daily stats to txt file
